@@ -4,7 +4,7 @@ const put=(k,v)=>localStorage.setItem('signal.'+k,JSON.stringify(v));
 let scope=pref('scope')??topics.slice(0,6), read=pref('read')||{},book=pref('book')||[],previous=pref('visit')||0,mode='all',archiveState=null,archiveError=false;
 put('visit',Date.now());
 tabs.push('Événements','Mon périmètre');
-async function loadArchive(){try{const r=await fetch('/archive');if(!r.ok)throw Error();const state=await r.json();if(!Array.isArray(state?.rows)||!Array.isArray(state.sources)||!Number.isFinite(state.at))throw Error();archiveState=state;archiveError=false}catch{archiveError=true}redraw()}
+async function loadArchive(){try{const r=await fetch('/archive');if(!r.ok)throw Error();const state=await r.json();if(!Array.isArray(state?.rows)||!Array.isArray(state.sources)||!Number.isFinite(state.at))throw Error();archiveState=state;archiveError=false;rememberArchive(state)}catch{archiveError=true}redraw()}
 function groupKey(r){if(r[0]==='Incident IT'&&r[7])return r[5];if(r[6]==='signal'&&/^https?:/.test(r[7]))return r[7].replace(/\/$/,'');return r[5].replace(/\/$/,'')}
 function groups(){
  const seen=new Map(),all=[...items(),...(archiveState?.rows||[])];
@@ -25,7 +25,6 @@ function extras(){
  if(!tab){const tiles=[['visit',previous?gs.filter(g=>g.ts>previous).length:'—'],['pending',gs.filter(g=>g.status==='Signalé').length],['unread',gs.filter(g=>g.match&&!(read[g.id]>=g.ts)).length],['calendar',cal.filter(x=>x.done).length+'/'+cal.length]];
  document.querySelector('.grid').insertAdjacentHTML('afterend','<h2>Suivi personnel</h2><div class="grid">'+tiles.map(([k,v])=>'<button class="card" data-mode="'+k+'">'+modeLabels[k]+'<strong>'+v+'</strong></button>').join('')+'</div>')}
  if(tab===2)view.insertAdjacentHTML('afterbegin','<h2>Carnet de veille</h2>'+[0,1,2].map(i=>'<article><b>H'+(i+1)+' · '+horizons[i]+'</b>'+book.filter(x=>x.i===i).map(x=>'<p>'+link(x.url,x.title)+' · '+date(x.ts)+'</p>').join('')+'<p><button onclick="writeSummary('+i+')">Rédiger avec mes références ('+book.filter(x=>x.i===i).length+')</button></p></article>').join(''));
- if(tab===3)view.insertAdjacentHTML('afterbegin','<article><b>Archive serveur</b><p>'+ (archiveError?'Archive indisponible':archiveState?'Dernier contrôle · '+time(archiveState.at)+' · '+archiveState.sources.filter(s=>s.ok).length+'/5 sources reçues':'Chargement…')+'</p></article>');
  if(tab===scopeTab)view.innerHTML='<h2>Mon périmètre</h2><p>Choisis les sujets qui alimentent ton indicateur « à lire » sur cet appareil.</p><div class="panel">'+topics.map((t,i)=>'<label style="display:inline-block;padding:10px"><input type="checkbox" onchange="selectScope('+i+',this.checked)" '+(scope.includes(t)?'checked':'')+'> '+t+'</label>').join('')+'</div><button data-mode="unread">Voir mes événements à lire</button>';
  if(tab===eventsTab){const rows=gs.filter(g=>mode==='all'||mode==='visit'&&previous&&g.ts>previous||mode==='pending'&&g.status==='Signalé'||mode==='unread'&&g.match&&!(read[g.id]>=g.ts));
  view.innerHTML='<h2>Événements</h2><div class="filters">'+Object.entries(modeLabels).map(([k,v])=>'<button aria-pressed="'+(k===mode)+'" data-mode="'+k+'">'+v+'</button>').join('')+'</div>'+(mode==='calendar'?(cal.length?cal.map(x=>'<article>H'+(x.i+1)+' · '+date(x.end)+' · '+(x.done?'À temps':'Échéance manquée')+'</article>').join(''):'Aucune échéance écoulée.'):rows.map(g=>{const id=esc(g.id);return '<article><span class="tag">'+esc(g.status)+(mode==='visit'?' · '+(g.status==='Résolu'?'Résolution':g.updated?'Mise à jour':'Nouveau'):'')+'</span><h3>'+esc(g.title)+'</h3><details><summary>Chronologie et sources ('+g.rows.length+')</summary>'+g.rows.map(r=>'<p>'+time(r[2])+' · '+link(r[5],r[1])+' · '+esc(r[6]||r[0])+'<br>'+esc(r[4])+'</p>').join('')+'</details><div class="filters"><button data-read="'+id+'">'+(read[g.id]>=g.ts?'Lu':'Marquer comme lu')+'</button>'+[0,1,2].map(i=>'<button data-book="'+id+'" data-i="'+i+'" '+(book.some(x=>x.id===g.id&&x.i===i)?'disabled':'')+'>Ajouter à H'+(i+1)+'</button>').join('')+'</div></article>'}).join('')||(mode==='visit'&&!previous?'Première visite sur cet appareil. Les nouveautés apparaîtront à ton retour.':'Aucun événement pour cette sélection.'))}
@@ -52,10 +51,10 @@ function saveMonthlyReview(update) {
 function monthlyPublications() {
   const publications = new Map();
   for (const row of [...(archiveState?.rows || []), ...items()]) {
-    if (row[0]==='Incident IT' || !/^https?:\/\//i.test(row[5]) ||
-        !Number.isFinite(Date.parse(row[2])) || monthKey(row[2])!==reviewMonth) continue;
-    const id = row[5].replace(/\/$/, '');
-    publications.set(id, row);
+    if (!visiblePublication(row) || row[0]==='Incident IT' || !/^https?:\/\//i.test(row[5]) ||
+        !Number.isFinite(Date.parse(row[2])) || monthKey(knownPublication(row)[2])!==reviewMonth) continue;
+    const id = publicationId(row);
+    publications.set(id, knownPublication(row));
   }
   return [...publications].sort((a,b)=>Date.parse(b[1][2])-Date.parse(a[1][2]));
 }

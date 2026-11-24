@@ -6,16 +6,17 @@ root = Path(__file__).resolve().parent
 src = root / "src"
 public = root / "public"
 public.mkdir(exist_ok=True)
-html = (src / "index.html").read_text()
-app = (src / "app.js").read_text()
-events = (src / "events.js").read_text()
+html = (src / "index.html").read_text(encoding="utf-8")
+app = (src / "app.js").read_text(encoding="utf-8")
+events = (src / "events.js").read_text(encoding="utf-8")
+tracking = (src / "source-tracking.js").read_text(encoding="utf-8")
 marker = "let ctx=radar"
 if app.count(marker) != 1:
     raise ValueError("Point d'insertion des événements introuvable ou ambigu")
-app = app.replace(marker, events + "\n" + marker)
+app = app.replace(marker, events + "\n" + tracking + "\n" + marker)
 assets = {"index.html": html, "app.js": app}
 for name, content in assets.items():
-    (public / name).write_text(content)
+    (public / name).write_text(content, encoding="utf-8")
 worker = root / "dist/server"
 worker.mkdir(parents=True, exist_ok=True)
-(worker / "index.js").write_text("const assets=" + json.dumps(assets) + ";\n" + (src / "archive.js").read_text())
+(worker / "index.js").write_text("const assets=" + json.dumps(assets) + ";\n" + (src / "archive.js").read_text(encoding="utf-8"), encoding="utf-8")
