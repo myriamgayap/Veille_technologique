@@ -1,6 +1,6 @@
-# Signal · Veille technologique et cybersécurité
+# Veille informatique by Myriam
 
-Signal rassemble des alertes de cybersécurité, des incidents de services en ligne et des publications sur l’intelligence artificielle et la réglementation. Le tableau de bord permet de repérer les faits marquants de la semaine, de remonter à leur source et de conserver des références pour rédiger une synthèse.
+Le tableau de veille rassemble des alertes de cybersécurité, des incidents de services en ligne et des publications sur l’intelligence artificielle et la réglementation. Le tableau de bord permet de repérer les faits marquants de la semaine, de remonter à leur source et de conserver des références pour rédiger une synthèse.
 
 [Consulter le tableau de veille](https://myriam-veille.vercel.app)
 
