@@ -1,8 +1,8 @@
-const sourceThemes = ['Alertes cyber', 'IA et réglementation', 'IA', 'Incidents IT', 'Réseaux sociaux'];
+const sourceThemes = ['Alertes cyber', 'IA et réglementation', 'IA', 'Incidents IT', 'Réseaux sociaux', 'Avis cyber'];
 const sourceEndpoints = [
   'https://www.cert.ssi.gouv.fr/alerte/feed/', 'https://www.cnil.fr/fr/rss.xml',
   'https://www.microsoft.com/en-us/research/feed/', 'https://www.githubstatus.com/api/v2/incidents/unresolved.json',
-  'https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor='+socialDid+'&limit=50'
+  'https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor='+socialDid+'&limit=50', 'https://cert.cyber.gouv.fr/avis/feed/'
 ];
 const manualSources = [
   ['Publications ANSSI', 'Alertes cyber et métiers tech', 'https://cyber.gouv.fr/actualites/'],
@@ -15,7 +15,7 @@ const manualSources = [
 let sourceMonth = monthKey(Date.now()), sourceTheme = '';
 const sourceState = pref('sourceTracking') ?? {attempts:{}, records:{}, opened:{}, associations:[]};
 const saveSources = ()=>put('sourceTracking', sourceState);
-const publicationId = row=>row[5].replace(/\/$/, '');
+const publicationId = row=>publicationKey(row[5]);
 const socialSignal = row=>row[0]===names[4];
 const measuredTime = value=>value ? time(value) : 'Non mesuré';
 const isPublication = row=>Array.isArray(row) && /^https?:\/\//i.test(row[5]) &&
@@ -23,7 +23,7 @@ const isPublication = row=>Array.isArray(row) && /^https?:\/\//i.test(row[5]) &&
 const archivePublication = row=>row[9] ? [...row.slice(0,2),row[9],...row.slice(3)] : row;
 
 function githubPublications(incidents) {
-  return (incidents || []).map(x=>['Incident IT', sources[3], x.created_at, x.name, x.status, x.shortlink, x.status, x.id]).filter(isPublication);
+  return (incidents || []).map(x=>['Incident IT', sources[3], x.created_at, x.name, x.status, x.shortlink, x.status, x.id, null, null, x.updated_at]).filter(isPublication);
 }
 
 function feedCandidates() {
@@ -51,7 +51,7 @@ function rememberPublications(rows, detected, enterFeed) {
 function rememberArchive(state) {
   const rows = state.rows.filter(isPublication).map(archivePublication);
   rememberPublications(rows, null, false);
-  rememberPublications(rows.filter(row=>row[0]==='Incident IT' || row[1]===sources[0]), Date.now(), true);
+  rememberPublications(rows.filter(row=>row[0]==='Incident IT' || bulletinReference(row[5])), Date.now(), true);
   saveSources();
 }
 
@@ -98,19 +98,21 @@ function publicationDates(row) {
   const record = sourceState.records[publicationId(row)];
   return 'Publication · '+time(record?.published || row[9] || row[2])+
     ' · Première détection · '+measuredTime(record?.detected)+
-    ' · Ajout au fil · '+measuredTime(record?.added);
+    ' · Ajout au fil · '+measuredTime(record?.added)+
+    (bulletinReference(row[5]) && row[10] ? ' · Dernière mise à jour · '+time(row[10]) : '');
 }
 
 function trackedPublications() {
   const rows = new Map();
   for (const raw of [...(archiveState?.rows || []), ...feedCandidates(), ...savedSignals()].filter(isPublication)) {
-    const row = knownPublication(raw);
+    const row = raw;
     const id = publicationId(row);
     const previous = rows.get(id);
     // Retain the external association if only one copy includes it.
-    if (!previous?.[7] || row[7]) rows.set(id,row);
+    if (bulletinReference(row[5])) rows.set(id,newestPublications(previous ? [previous,row] : [row])[0]);
+    else if (!previous?.[7] || row[7]) rows.set(id,row);
   }
-  return [...rows.values()].sort((a,b)=>Date.parse(b[2])-Date.parse(a[2]));
+  return [...rows.values()].map(knownPublication).sort((a,b)=>Date.parse(b[2])-Date.parse(a[2]));
 }
 
 function eventComparisons(rows) {
@@ -141,7 +143,7 @@ function eventComparisons(rows) {
     const firstTime = Date.parse(event[0][2]);
     if (monthKey(firstTime)!==sourceMonth) return [];
     const first = event.filter(row=>Date.parse(row[2])===firstTime);
-    const official = event.find(row=>row[0]==='Incident IT' || row[1]==='CERT-FR');
+    const official = event.find(row=>row[0]==='Incident IT' || bulletinReference(row[5]));
     return [{event, first, official, firstTime}];
   });
 }
@@ -278,5 +280,24 @@ document.addEventListener('click', event=>{
   render();
 });
 
+function migrateBulletinKeys(entries) {
+  let changed = false;
+  for (const id of Object.keys(entries)) {
+    const key = publicationKey(id);
+    if (key !== id) {
+      entries[key] ??= entries[id];
+      delete entries[id];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+migrateBulletinKeys(sourceState.records);
+let migratedReviews = false;
+for (const review of Object.values(monthlyReviews)) {
+  if (review.ratings && migrateBulletinKeys(review.ratings)) migratedReviews = true;
+}
+if (migratedReviews) put('monthlyReviews',monthlyReviews);
 rememberPublications(feedCandidates(), null, true);
 saveSources();
