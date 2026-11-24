@@ -1,0 +1,15 @@
+{
+  "framework": null,
+  "buildCommand": "python3 build.py",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/archive",
+      "destination": "https://observatoire-signal-myriam.brightcress3.chatgpt.site/archive"
+    },
+    {
+      "source": "/feed/:id([0-4])",
+      "destination": "https://observatoire-signal-myriam.brightcress3.chatgpt.site/feed/:id"
+    }
+  ]
+}
